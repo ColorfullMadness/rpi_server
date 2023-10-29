@@ -15,7 +15,7 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 // async fn json() -> impl Responder {
 //
 // }
-#[get("/health")]
+#[get("/status")]
 async fn health() -> impl Responder {
     let health = Health {
         status: "Ok".to_string(),
