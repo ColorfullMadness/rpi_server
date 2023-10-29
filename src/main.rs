@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()>{
             .service(greet)
             .default_service(web::route().to(not_found::not_found))
     })
-        .bind(("192.168.1.20", 8080))?
+        .bind(("172.27.224.3", 8080))?
         .run()
         .await
 }
