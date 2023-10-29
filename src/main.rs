@@ -1,12 +1,12 @@
 mod not_found;
 
 use std::{env, fs};
-use actix_web::{main, get, HttpServer, App, web, Responder};
+use actix_web::{get, HttpServer, App, web, Responder};
 use handlebars::Handlebars;
 
 #[get("/hello/{name}")]
 async fn greet(name: web::Path<String>) -> impl Responder {
-    format!("Hello {}!", name)
+    format!("Hello {}!\n", name)
 }
 
 // #[get("/json/test1")]
