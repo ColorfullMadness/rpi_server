@@ -55,7 +55,7 @@ async fn main() -> std::io::Result<()>{
             .service(health)
             .default_service(web::route().to(not_found::not_found))
     })
-        .bind(("127.0.0.1", 8080))?
+        .bind(("172.27.224.3", 8080))?
         .run()
         .await
     // 172.27.224.3
