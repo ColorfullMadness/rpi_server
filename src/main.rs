@@ -3,6 +3,7 @@ mod not_found;
 use std::{env, fs};
 use actix_web::{get, HttpServer, App, web, Responder};
 use handlebars::Handlebars;
+use serde::Serialize;
 
 #[get("/hello/{name}")]
 async fn greet(name: web::Path<String>) -> impl Responder {
@@ -13,6 +14,23 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 // async fn json() -> impl Responder {
 //
 // }
+#[get("/health")]
+async fn health() -> impl Responder {
+    let health = Health {
+        status: Status::OK
+    };
+    Ok(web::Json(health))
+}
+
+enum Status {
+    OK,
+    NotOk
+}
+
+#[derive(Serialize)]
+struct Health {
+    status: Status
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()>{
