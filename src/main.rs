@@ -1,20 +1,18 @@
 mod not_found;
+mod config_handler;
 
 use std::env;
-use actix_web::{get, HttpServer, App, web, Responder};
+use actix_web::{get, HttpServer, App, web, Responder, post};
 use actix_web::error::JsonPayloadError;
 use handlebars::Handlebars;
 use serde::Serialize;
+use crate::config_handler::ConfigHandler;
 
 #[get("/hello/{name}")]
 async fn greet(name: web::Path<String>) -> impl Responder {
     format!("Hello {}!\n", name)
 }
 
-// #[get("/json/test1")]
-// async fn json() -> impl Responder {
-//
-// }
 #[get("/status")]
 async fn health() -> impl Responder {
     let health = Health {
@@ -33,6 +31,12 @@ struct Health {
     status: String
 }
 
+#[get("/status/system")]
+async fn system() -> impl Responder{
+    let config = ConfigHandler::default();
+    Ok::<web::Json<ConfigHandler>,JsonPayloadError>(web::Json(config))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()>{
     env::set_var("RUST_LOG", "actix_web=debug,actix_server=info");
@@ -42,6 +46,8 @@ async fn main() -> std::io::Result<()>{
     // for path in paths {
     //     println!("Name: {}", path.unwrap().path().display())
     // }
+
+    let mut conf = ConfigHandler::default();
 
     let mut handlebars = Handlebars::new();
     handlebars.register_templates_directory(".html", "./src/templates/").expect("Couldn't load templates");
@@ -53,10 +59,10 @@ async fn main() -> std::io::Result<()>{
             .app_data(data.clone())
             .service(greet)
             .service(health)
+            .service(system)
             .default_service(web::route().to(not_found::not_found))
     })
-        .bind(("10.0.10.5", 8080))?
+        .bind((conf.ip_address, 8080))?
         .run()
         .await
-    // 172.27.224.3
 }
