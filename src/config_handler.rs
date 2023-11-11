@@ -1,34 +1,29 @@
 use std::fmt::{Display, Formatter, write};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sysinfo::{System, SystemExt, NetworkExt, Networks, NetworksExt};
-use log::info;
+use log::{error, info, warn};
 use uuid;
-#[derive(Serialize)]
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
+use uuid::Uuid;
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigHandler {
+    pub uuid: String,
     pub ip_address: String,
     pub platform: String,
     pub templates_loc: String,
     pub mac_address: String,
-    pub uuid: String
 }
 
-impl Display for ConfigHandler{
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write(f, format_args!("Config: ip_address: {}, mac_address: {}, uuid: {}",
-            self.ip_address,
-            self.mac_address,
-            self.uuid))
-    }
-}
-
-impl Default for ConfigHandler {
-    fn default() -> Self {
+impl ConfigHandler {
+    pub fn init(&self) -> Self {
         //TODO this should be read from conf file
         let interface_name = "vEthernet (Default Switch)";
 
         let mut sys = System::new_all();
         sys.refresh_all();
-
         let mut templates_loc = "./src/templates".to_string();
         let mut address = "127.0.0.1".to_string();
         let networks = sys.networks();
@@ -48,14 +43,55 @@ impl Default for ConfigHandler {
             }
             None => {}
         }
-
-        ConfigHandler {
+        let config:ConfigHandler = ConfigHandler {
+            uuid: uuid::Uuid::new_v4().to_string(),
             ip_address: address,
             platform: sys.name().expect("Couldn't get OS name."),
-            templates_loc,
-            mac_address,
-            uuid: uuid::Uuid::new_v4().to_string(),
+            templates_loc: templates_loc,
+            mac_address: mac_address,
+        };
+
+        let path = Path::new("./src/settings.conf");
+        let mut file = match File::open(path) {
+            Err(why) => {
+                info!("Couldn't open file {:?}: {}", path, why);
+                match File::options().write(true).create(true).open(path) {
+                    Err(why) => panic!("Couldn't create settings.conf file, {}", why),
+                    Ok(mut file) => {
+                        let _ = file.write(serde_json::to_string::<ConfigHandler>(&config).unwrap().as_ref());
+                        file
+                    }
+                }
+            },
+            Ok(file) => file,
+        };
+
+        let mut s = String::new();
+        match file.read_to_string(&mut s) {
+            Err(why) => error!("Couldn't read from file {:?}: {}", path, why),
+            Ok(_) => info!("Settings file content: {}", s)
+        };
+        serde_json::from_str(&*s).unwrap()
+    }
+}
+
+impl Default for ConfigHandler{
+    fn default() -> Self {
+        ConfigHandler{
+            uuid: Uuid::new_v4().to_string(),
+            ip_address: "127.0.0.1".to_string(),
+            platform: "Windows".to_string(),
+            templates_loc: "./templates".to_string(),
+            mac_address: "00:00:00:00:00".to_string()
         }
     }
 }
 
+impl Display for ConfigHandler{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write(f, format_args!("Config: ip_address: {}, mac_address: {}, uuid: {}",
+            self.ip_address,
+            self.mac_address,
+            self.uuid))
+    }
+}
