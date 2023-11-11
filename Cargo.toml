@@ -11,3 +11,12 @@ handlebars = { version = "4.4.0", features = ["dir_source"] }
 serde = { version = "1.0.190", features = ["derive"] }
 serde_json = "1.0.107"
 sysinfo = "0.29.10"
+env_logger = "0.10.0"
+log = "0.4.20"
+[dependencies.uuid]
+version = "1.5.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
