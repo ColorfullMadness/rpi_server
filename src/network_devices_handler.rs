@@ -19,7 +19,7 @@ impl Default for NetworkDevicesHandler {
                         Ok(res) => {
                             let response = &mut "".to_string();
                             match port.read_to_string(response) {
-                                Ok(_) => . .{}
+                                Ok(_) => {}
                                 Err(why) => println!("Couldn't read: {}", why)
                             }
                             println!("{}",response);
