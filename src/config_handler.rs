@@ -19,13 +19,12 @@ pub struct ConfigHandler {
 
 impl ConfigHandler {
     pub fn init(&self) -> Self {
-        //TODO this should be read from conf file
-        let interface_name = "vEthernet (Default Switch)";
 
         let mut sys = System::new_all();
         sys.refresh_all();
         let mut templates_loc = "./src/templates".to_string();
         let mut address = "127.0.0.1".to_string();
+        let mut interface_name = "vEthernet (Default Switch)";
         let networks = sys.networks();
 
         let mac_address = networks.iter()
@@ -39,6 +38,7 @@ impl ConfigHandler {
                 if x.eq("Raspberry Pi") {
                     templates_loc = "./templates".to_string();
                     address = "10.0.10.5".to_string();
+                    interface_name = "eth0";
                 }
             }
             None => {}

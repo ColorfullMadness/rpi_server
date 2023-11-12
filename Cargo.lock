@@ -1032,6 +1032,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "serial2",
  "sysinfo",
  "uuid",
 ]
@@ -1132,6 +1133,17 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serial2"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "339fec676d960afd7510f4fa25bef430d37f0087ee803f666481a94b3dd3460a"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "winapi",
 ]
 
 [[package]]

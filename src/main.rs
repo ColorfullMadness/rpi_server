@@ -1,5 +1,7 @@
 mod not_found;
 mod config_handler;
+mod network_devices_handler;
+mod network_device;
 
 use std::{env, fs};
 use actix_web::{get, HttpServer, App, web, Responder, post, HttpResponse};
@@ -12,7 +14,9 @@ use env_logger::Env;
 use handlebars::Handlebars;
 use log::info;
 use serde::Serialize;
+use serial2::SerialPort;
 use crate::config_handler::ConfigHandler;
+use crate::network_devices_handler::NetworkDevicesHandler;
 
 #[get("/hello/{name}")]
 async fn greet(name: web::Path<String>) -> impl Responder {
@@ -21,10 +25,6 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 
 #[get("/status/health")]
 async fn health() -> impl Responder {
-    // let health = Health {
-    //     status: "Ok".to_string(),
-    // };
-    // Ok::<web::Json<Health>, JsonPayloadError>(web::Json(health))
     HttpResponse::new(StatusCode::NO_CONTENT)
 }
 
@@ -36,16 +36,18 @@ async fn system(config: web::Data<ConfigHandler>) -> impl Responder{
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()>{
-    env::set_var("RUST_LOG", "config_handler=info, main=info ,actix_web=debug,actix_server=info");
-
+    env::set_var("RUST_LOG", "main,main=config_handler,main=NetworkDevicesHandler,actix_web=debug,actix_server=info");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
-    let paths = fs::read_dir("./").unwrap();
 
+    let paths = fs::read_dir("./").unwrap();
     for path in paths {
         println!("Name: {}", path.unwrap().path().display())
     }
+
     info!("Starting");
     println!("{:?}", env::current_dir());
+
+    NetworkDevicesHandler::default();
 
     let mut conf = ConfigHandler::init(&Default::default());
     let templates = conf.templates_loc.clone();
