@@ -1,9 +1,10 @@
 use std::io::Read;
 use log::info;
+use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
 use crate::network_device::NetworkDevice;
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct NetworkDevicesHandler {
     pub devices: Vec<NetworkDevice>
 }
@@ -11,18 +12,22 @@ pub struct NetworkDevicesHandler {
 impl Default for NetworkDevicesHandler {
     fn default() -> Self {
         let ports = SerialPort::available_ports().expect("Couldn't read Serial Port list");
+        let response = &mut "".to_string();
+        let devices:Vec<NetworkDevice> = Vec::new();
         for p in ports {
             println!("Port: {:?}", p);
             match SerialPort::open(p, 9600) {
                 Ok(mut port) => {
                     match port.write("show version\n".as_ref()) {
                         Ok(res) => {
-                            let response = &mut "".to_string();
                             match port.read_to_string(response) {
                                 Ok(_) => {}
                                 Err(why) => println!("Couldn't read: {}", why)
                             }
                             println!("{}",response);
+                            if response.contains("Cisco") {
+                               //TODO add reading all the important config parts, move reading from port to another function
+                            }
                         }
                         Err(why) => println!("Couldn't write: {}", why)
                     }
@@ -32,7 +37,12 @@ impl Default for NetworkDevicesHandler {
         }
 
         NetworkDevicesHandler{
-            devices: vec![NetworkDevice::default()],
+            devices: vec![NetworkDevice{
+                ip_address: "".to_string(),
+                s_port: "".to_string(),
+                manufacturer: "".to_string(),
+                hostname: response.to_string(),
+            }],
         }
     }
 }

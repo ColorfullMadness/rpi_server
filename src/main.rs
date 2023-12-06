@@ -34,6 +34,11 @@ async fn system(config: web::Data<ConfigHandler>) -> impl Responder{
     Ok::<web::Json<Data<ConfigHandler>>,JsonPayloadError>(web::Json(config))
 }
 
+#[get("/devices")]
+async fn devices(devices: Data<NetworkDevicesHandler>) -> impl Responder {
+    Ok::<web::Json<Data<NetworkDevicesHandler>>,JsonPayloadError>(web::Json(devices))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()>{
     env::set_var("RUST_LOG", "main,main=config_handler,main=NetworkDevicesHandler,actix_web=debug,actix_server=info");
@@ -47,7 +52,7 @@ async fn main() -> std::io::Result<()>{
     info!("Starting");
     println!("{:?}", env::current_dir());
 
-    NetworkDevicesHandler::default();
+    let devices_handler = NetworkDevicesHandler::default();
 
     let mut conf = ConfigHandler::init(&Default::default());
     let templates = conf.templates_loc.clone();
@@ -62,10 +67,12 @@ async fn main() -> std::io::Result<()>{
         App::new()
             .app_data(data.clone())
             .app_data(web::Data::new(conf.clone()))
+            .app_data(Data::new(devices_handler.clone()))
             .wrap(Logger::default())
             .service(greet)
             .service(health)
             .service(system)
+            .service(devices)
             .default_service(web::route().to(not_found::not_found))
     })
         .bind((ip_addr.to_owned(), 8080))?
