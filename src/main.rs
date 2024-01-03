@@ -3,21 +3,40 @@ mod config_handler;
 mod network_devices_handler;
 mod network_device;
 
+use actix_web::http::header::ContentType;
 use std::{env, fs};
-use actix_web::{get, HttpServer, App, web, Responder, post, HttpResponse};
-use actix_web::error::JsonPayloadError;
+use std::collections::HashMap;
+use std::fmt::Error;
+use std::process::id;
+use std::sync::{Mutex, MutexGuard};
+use actix_web::{get, HttpServer, App, web, Responder, post, HttpResponse, ResponseError, put, delete};
+use actix_web::body::BoxBody;
+use actix_web::error::{JsonPayloadError, PayloadError};
 use actix_web::http::StatusCode;
 use actix_web::middleware::ErrorHandlerResponse::Response;
 use actix_web::middleware::Logger;
-use actix_web::web::Data;
+use actix_web::web::{Data, Json};
 use env_logger::Env;
 use handlebars::Handlebars;
 use log::info;
 use serde::Serialize;
 use serial2::SerialPort;
 use crate::config_handler::ConfigHandler;
+use crate::network_device::{NetworkDevice, Vlan, VlanDTO};
 use crate::network_devices_handler::NetworkDevicesHandler;
 
+use derive_more::{Error, Display};
+#[derive(Debug, Display, Error)]
+pub struct MyError {
+    name: String,
+}
+impl ResponseError for MyError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(StatusCode::NOT_FOUND)
+            .insert_header(ContentType::json())
+            .body(self.to_string())
+    }
+}
 #[get("/hello/{name}")]
 async fn greet(name: web::Path<String>) -> impl Responder {
     format!("Hello {}!\n", name)
@@ -29,16 +48,76 @@ async fn health() -> impl Responder {
 }
 
 #[get("/status/config")]
-async fn system(config: web::Data<ConfigHandler>) -> impl Responder{
+async fn system(config: Data<ConfigHandler>) -> impl Responder{
     info!("Fetched config: {}", &config.to_string());
-    Ok::<web::Json<Data<ConfigHandler>>,JsonPayloadError>(web::Json(config))
+    Ok::<Json<Data<ConfigHandler>>,JsonPayloadError>(Json(config))
 }
 
 #[get("/devices")]
-async fn devices(devices: Data<NetworkDevicesHandler>) -> impl Responder {
-    Ok::<web::Json<Data<NetworkDevicesHandler>>,JsonPayloadError>(web::Json(devices))
+async fn network_devices(devices: Data<Mutex<NetworkDevicesHandler>>) -> impl Responder {
+    let devices_data = &devices.lock().unwrap().devices;
+    Ok::<Json<HashMap<u32,NetworkDevice>>,JsonPayloadError>(Json(devices_data.clone()))
 }
 
+#[get("/device/{id}")]
+async fn get_network_device(path: web::Path<u32>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, MyError>{
+    let id = path.into_inner();
+    let devices = &network_devices_handler.lock().unwrap().devices;
+    let device_u =devices.get_key_value(&id);
+    match device_u {
+        None => Err(MyError{ name:"Couldn't find device".to_string() }),
+        Some((_, device)) => Ok(Json(device.clone()))
+    }
+}
+
+#[delete("/device/{id}/vlan/{vlan_id}")]
+async fn delete_vlan_from_device(path: web::Path<(u32, u32)> ,devices: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, MyError> {
+    let (device_id, vlan_id) = path.into_inner();
+    let devices = &mut devices.lock().unwrap().devices;
+    let device = devices.get_mut(&device_id);
+    match device {
+        None => Err(MyError{ name:"Couldn't find device".to_string() }),
+        Some((device)) => {
+            device.remove_vlan(vlan_id)
+        }
+    }
+}
+
+#[post("/device/{id}/hostname/{hostname}")]
+async fn change_device_hostname(path: web::Path<(u32, String)>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, MyError>{
+    let (id, hostname) = path.into_inner();
+
+    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
+        None => {
+            Err(MyError{name:"Couldn't find device.".to_string()})
+        }
+        Some(device) => {
+            match device.execute_command(("en \nconf t \nhostname".to_owned() + &*hostname + "\n").as_str()) {
+                Ok(response) => {
+                    device.hostname = hostname.to_string();
+                    Ok(Json(device.clone()))
+                }
+                Err(why) => {
+                    Err(MyError{name: "Couldn't change hostname".to_string()})
+                }
+            }
+        }
+    }
+}
+
+#[post("/device/{device_id}/vlan")]
+async fn add_vlan(path: web::Path<u32>, vlan_dto: web::Json<VlanDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, MyError> {
+    let id = path.into_inner();
+
+    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
+        None => {
+                Err(MyError{name:"Couldn't find device.".to_string()})
+        }
+        Some(device) => {
+            device.add_vlan(vlan_dto.into_inner())
+        }
+    }
+}
 #[actix_web::main]
 async fn main() -> std::io::Result<()>{
     env::set_var("RUST_LOG", "main,main=config_handler,main=NetworkDevicesHandler,actix_web=debug,actix_server=info");
@@ -52,7 +131,8 @@ async fn main() -> std::io::Result<()>{
     info!("Starting");
     println!("{:?}", env::current_dir());
 
-    let devices_handler = NetworkDevicesHandler::default();
+    let mut devices_handler = NetworkDevicesHandler::default();
+    devices_handler.read_vlans();
 
     let mut conf = ConfigHandler::init(&Default::default());
     let templates = conf.templates_loc.clone();
@@ -67,12 +147,15 @@ async fn main() -> std::io::Result<()>{
         App::new()
             .app_data(data.clone())
             .app_data(web::Data::new(conf.clone()))
-            .app_data(Data::new(devices_handler.clone()))
+            .app_data(Data::new(Mutex::new(devices_handler.clone())))
             .wrap(Logger::default())
             .service(greet)
             .service(health)
             .service(system)
-            .service(devices)
+            .service(network_devices)
+            .service(get_network_device)
+            .service(change_device_hostname)
+            .service(delete_vlan_from_device)
             .default_service(web::route().to(not_found::not_found))
     })
         .bind((ip_addr.to_owned(), 8080))?

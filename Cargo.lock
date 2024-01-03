@@ -1027,12 +1027,14 @@ name = "rpi_client"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "derive_more",
  "env_logger",
  "handlebars",
  "log",
  "serde",
  "serde_json",
  "serial2",
+ "substring",
  "sysinfo",
  "uuid",
 ]
@@ -1200,6 +1202,15 @@ checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "substring"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]
