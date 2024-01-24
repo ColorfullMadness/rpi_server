@@ -1,11 +1,9 @@
 use std::fmt::{Display, Formatter, write};
 use serde::{Deserialize, Serialize};
-use sysinfo::{System, SystemExt, NetworkExt, Networks, NetworksExt};
-use log::{error, info, warn};
+use sysinfo::{System, SystemExt, NetworkExt, NetworksExt, Networks};
+use log::{info, warn};
 use uuid;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
+use std::io::Write;
 use uuid::Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -15,6 +13,7 @@ pub struct ConfigHandler {
     pub platform: String,
     pub templates_loc: String,
     pub mac_address: String,
+    pub version: String,
 }
 
 impl ConfigHandler {
@@ -47,31 +46,33 @@ impl ConfigHandler {
             uuid: uuid::Uuid::new_v4().to_string(),
             ip_address: address,
             platform: sys.name().expect("Couldn't get OS name."),
-            templates_loc: templates_loc,
-            mac_address: mac_address,
+            templates_loc,
+            mac_address,
+            version: "1.0.0".to_string(),
         };
+        return config
 
-        let path = Path::new("./src/settings.conf");
-        let mut file = match File::open(path) {
-            Err(why) => {
-                info!("Couldn't open file {:?}: {}", path, why);
-                match File::options().write(true).create(true).open(path) {
-                    Err(why) => panic!("Couldn't create settings.conf file, {}", why),
-                    Ok(mut file) => {
-                        let _ = file.write(serde_json::to_string::<ConfigHandler>(&config).unwrap().as_ref());
-                        file
-                    }
-                }
-            },
-            Ok(file) => file,
-        };
+        // let path = Path::new("./src/settings.conf");
+        // let mut file = match File::open(path) {
+        //     Err(why) => {
+        //         info!("Couldn't open file {:?}: {}", path, why);
+        //         match File::options().write(true).create(true).open(path) {
+        //             Err(why) => panic!("Couldn't create settings.conf file, {}", why),
+        //             Ok(mut file) => {
+        //                 let _ = file.write(serde_json::to_string::<ConfigHandler>(&config).unwrap().as_ref());
+        //                 file
+        //             }
+        //         }
+        //     },
+        //     Ok(file) => file,
+        // };
 
-        let mut s = String::new();
-        match file.read_to_string(&mut s) {
-            Err(why) => error!("Couldn't read from file {:?}: {}", path, why),
-            Ok(_) => info!("Settings file content: {}", s)
-        };
-        serde_json::from_str(&*s).unwrap()
+        // let mut s = String::new();
+        // match file.read_to_string(&mut s) {
+        //     Err(why) => error!("Couldn't read from file {:?}: {}", path, why),
+        //     Ok(_) => info!("Settings file content: {}", s)
+        // };
+        // serde_json::from_str(&*s).unwrap()
     }
 }
 

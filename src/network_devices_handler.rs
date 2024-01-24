@@ -43,7 +43,8 @@ impl Default for NetworkDevicesHandler {
                                     ip_address: "".to_string(),
                                     s_port: p.to_str().unwrap().to_string(),
                                     hostname: output.1.trim().to_string(),
-                                    vlans: HashMap::new()
+                                    vlans: HashMap::new(),
+                                    ports: HashMap::new()
                                 });
                             }
                         }
@@ -63,6 +64,12 @@ impl NetworkDevicesHandler {
     pub fn read_vlans(&mut self) {
         for (_, device) in self.devices.iter_mut() {
             device.read_vlans();
+        }
+    }
+
+    pub fn read_interfaces(&mut self) {
+        for (_, device) in self.devices.iter_mut() {
+            device.parse_ports().expect("TODO: panic message");
         }
     }
 }

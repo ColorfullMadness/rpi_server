@@ -1,26 +1,32 @@
 use std::collections::HashMap;
-use std::fmt::format;
-use std::io::{Error, Read};
+use std::io::Read;
 use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
 use substring::Substring;
-use crate::MyError;
+use crate::ExecutionError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkDevice {
+    pub serial_number: String, 
     pub ip_address: String,
     pub s_port: String,
     pub hostname: String,
     pub vlans: HashMap<u32, Vlan>,
+    pub interfaces: HashMap<u32, Port>,
+    pub raw_config: String,
 }
+//Unikalny
 
 impl Default for NetworkDevice {
     fn default() -> Self {
         NetworkDevice {
+            serial_number: "".to_string(),
             ip_address: "0.0.0.0".to_string(),
             s_port: "COM69".to_string(),
             hostname: "Router".to_string(),
             vlans: HashMap::new(),
+            interfaces: HashMap::new(),
+            raw_config: "".to_string(),
         }
     }
 }
@@ -71,12 +77,12 @@ impl NetworkDevice {
                                 let status = line.substring(status_index, ports_index-1).trim();
                                 let ports = line.substring(ports_index, line.len()).trim();
 
-                                let ports_p: Vec<Port> = parse_ports(ports);
+                                //TODOlet ports_p: Vec<u32> = parse_interfaces(ports);
 
                                 let vlan = Vlan {
                                     name: name.to_string(),
                                     status: status.to_string(),
-                                    ports: ports_p,
+                                    ports: vec![],
                                 };
                                 vlans.insert(nr,vlan);
                                 last_vlan = nr;
@@ -85,8 +91,8 @@ impl NetworkDevice {
                                 let mut vlan = vlans.get_mut(&last_vlan).expect("Should be vlan present here.");
                                 let ports = line.substring(ports_index, line.len()).trim();
 
-                                let mut ports_p: Vec<Port> = parse_ports(ports);
-                                vlan.ports.append(&mut ports_p);
+                                let mut ports_p: Vec<Port> = parse_interfaces(ports);
+                                // vlan.ports.append(&mut ports_p);
                             }
                         }
                     }
@@ -99,11 +105,11 @@ impl NetworkDevice {
         }
     }
 
-    pub fn remove_vlan(&mut self, vlan_id: u32) -> Result<String, MyError> {
+    pub fn remove_vlan(&mut self, vlan_id: u32) -> Result<String, ExecutionError> {
         return match self.execute_command(&format!("en\n conf t\n no vlan {}", vlan_id)) {
             Err(why) => {
-                Err(MyError{
-                   name: why.to_string()
+                Err(ExecutionError {
+                   message: why.to_string()
                 })
             }
             Ok(_) => {
@@ -113,7 +119,7 @@ impl NetworkDevice {
         }
     }
 
-    pub fn add_vlan(&mut self, vlan: VlanDTO) -> Result<String, MyError>{
+    pub fn add_vlan(&mut self, vlan: VlanDTO) -> Result<String, ExecutionError>{
         return match self.execute_command(&format!("en\n conf t\n vlan {}", vlan.number)) {
             Ok(_response) => {
                 match self.execute_command(&format!("name {}", vlan.name)) {
@@ -123,30 +129,92 @@ impl NetworkDevice {
                     }
                     Err(why) => {
                         Err(
-                            MyError{name: why.to_string()}
+                            ExecutionError { message: why.to_string()}
                         )
                     }
                 }
             }
             Err(why) => {
                 Err(
-                    MyError{name: why.to_string()}
+                    ExecutionError { message: why.to_string()}
                 )
             }
         }
     }
+
+    pub fn parse_ports(&mut self) -> Result<&mut NetworkDevice, ExecutionError> {
+        match self.execute_command("sh ip int brief") {
+            Ok(response) => {
+                let mut interface_index:usize = 0;
+                let mut ip_address_index:usize = 0;
+                let mut ok_index:usize = 0;
+                let mut method_index:usize = 0;
+                let mut status_index:usize = 0;
+                let mut protocol_index:usize = 0;
+
+                let mut ports:HashMap<u32, Port> = HashMap::new();
+                
+                response.lines().skip(1).enumerate().for_each(|(nr, line)| {
+                    if line.starts_with("Interface") {
+                        interface_index = line.find("Interface").unwrap_or(5);
+                        ip_address_index = line.find("IP-Address").unwrap_or(38);
+                        ok_index = line.find("OK?").unwrap_or(48);
+                        method_index = line.find("Method").unwrap_or(48);
+                        status_index = line.find("Status").unwrap_or(48);
+                        protocol_index = line.find("Protocol").unwrap_or(48);
+                    } else {
+                        let port = line.substring(interface_index, ip_address_index - 1).trim();
+                        let ip_address = line.substring(ip_address_index, ok_index - 1).trim();
+                        let ok = line.substring(ok_index, method_index - 1).trim();
+                        let method = line.substring(method_index, status_index - 1).trim();
+                        let status = line.substring(status_index, protocol_index - 1).trim();
+                        let protocol = line.substring(protocol_index, line.len()).trim();
+
+                        let pat = &['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+                        let first_digit = port.find(pat).unwrap();
+                        println!("First digit: {}, coresponging leter: {:?}", first_digit, port.get(first_digit..));
+                        let (interface, port) = port.split_at(first_digit);
+                        println!("Interface: {}",interface);
+                        let (module,port_nr) = port.split_once("/").unwrap_or((port, ""));
+                        println!("Module: {}, Port_number: {}", module, port_nr);
+
+                        let port = Port{
+                            interface: interface.to_string(),
+                            module: module.parse().unwrap(),
+                            number: port_nr.parse().unwrap_or(0),
+                        };
+
+                        ports.insert(nr as u32, port);
+                    }
+                });
+                self.ports = ports;
+                Ok(self)
+            }
+            Err(why) => {
+                println!("Couldn't read response from device {:?} because {}",self,why);
+                Err(ExecutionError{
+                    message: "Couldn't find device".to_string()
+                })
+            }
+        }
+    }
+
+    //TODO
+    // fn add_int_to_vlan(&mut self, vlan: VlanDTO) -> Result<String, MyError> {
+    //     return match
+    // }
 }
 
-fn parse_ports(ports: &str) -> Vec<Port> {
+fn parse_interfaces(ports: &str) -> Vec<Port> {
     if ports.is_empty() {
         return Vec::new();
     }
     //TODO to nie dziala dla portow w formacie 3/13-16, sprawdzic co to za format portow czy ejst konieczne wspieranie
     ports.split(",").map(|port|{
-        let (interface, port_mod): (&str, &str) = port.trim().split_at(2);
+        let (kind, port_mod): (&str, &str) = port.trim().split_at(2);
         let (port_mod_p, port_nr): (&str, &str) = port_mod.split_once("/").expect("Mod/Port format not correct.");
         Port {
-            interface: interface.to_string(),
+            interface: kind.to_string(),
             module: port_mod_p.parse().expect(&*("Couldn't parse port module: ".to_owned() + port_mod_p)),
             number: port_nr.parse().expect("Couldn't parse port nr"),
         }
@@ -157,13 +225,14 @@ fn parse_ports(ports: &str) -> Vec<Port> {
 pub struct VlanDTO {
     pub number: u32,
     pub name: String,
+    pub interfaces: Vec<Port>
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Vlan {
     pub(crate) name: String,
     pub(crate) status: String, //TODO change this to enum with possible status values
-    pub(crate) ports: Vec<Port>
+    pub(crate) ports: Vec<u32> //TODO najpierw trzeba zaczytać interfejsy i potem można przypisać ich idki do vlanów
 }
 
 impl Default for Vlan {
