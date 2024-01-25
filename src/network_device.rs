@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Read;
+use std::net::IpAddr;
 use std::thread::panicking;
 use actix_web::web::Json;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ pub struct NetworkDevice {
     pub s_port: String,
     pub hostname: String,
     pub vlans: HashMap<u32, Vlan>,
-    pub interfaces: HashMap<u32, Port>,
+    pub interfaces: HashMap<u32, Interface>,
     pub startup_config: String,
     pub running_config: String,
 }
@@ -175,7 +176,7 @@ impl NetworkDevice {
         }
     }
 
-    pub fn parse_ports(&mut self) -> Result<&mut NetworkDevice, ExecutionError> {
+    pub fn read_interfaces(&mut self) -> Result<&mut NetworkDevice, ExecutionError> {
         match self.execute_command("sh ip int brief") {
             Ok(response) => {
                 let mut interface_index:usize = 0;
@@ -185,7 +186,7 @@ impl NetworkDevice {
                 let mut status_index:usize = 0;
                 let mut protocol_index:usize = 0;
 
-                let mut ports:HashMap<u32, Port> = HashMap::new();
+                let mut ports:HashMap<u32, Interface> = HashMap::new();
                 
                 response.lines().skip(1).enumerate().for_each(|(nr, line)| {
                     if line.starts_with("Interface") {
@@ -211,10 +212,12 @@ impl NetworkDevice {
                         let (module,port_nr) = port.split_once("/").unwrap_or((port, ""));
                         println!("Module: {}, Port_number: {}", module, port_nr);
 
-                        let port = Port{
-                            interface: interface.to_string(),
+                        let port = Interface{
+                            int_type: interface.to_string(),
                             module: module.parse().unwrap(),
                             number: port_nr.parse().unwrap_or(0),
+                            ip_address: ip_address.parse().unwrap(),
+                            status: status.parse().unwrap(),
                         };
 
                         ports.insert(nr as u32, port);
@@ -257,7 +260,7 @@ fn parse_interfaces(device: &NetworkDevice, ports: &str) -> Vec<u32> {
 
         device.interfaces.iter()
             .filter(|(id, int)|{
-                int.interface == kind_m && int.module == port_mod_p.parse::<u32>().unwrap() && int.number == port_nr.parse::<u32>().unwrap()
+                int.int_type == kind_m && int.module == port_mod_p.parse::<u32>().unwrap() && int.number == port_nr.parse::<u32>().unwrap()
             })
             .map(|(id, int)|{
                 println!("ID: {}", id);
@@ -273,6 +276,19 @@ pub struct VlanDTO {
     pub number: u32,
     pub name: String,
     pub interfaces: Vec<u32>
+}
+
+#[derive(Debug, Deserialize)]
+pub enum InterfaceStatus {
+    UP,
+    DOWN,
+}
+#[derive(Debug, Deserialize)]
+pub struct InterfaceDTO {
+    pub ip_address_from: String,
+    pub mask_from: String,
+    pub ip_address_to: String,
+    pub status: InterfaceStatus,
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
@@ -293,8 +309,10 @@ impl Default for Vlan {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Port {
-    pub interface: String,
+pub struct Interface {
+    pub int_type: String,
     pub module: u32,
     pub number: u32,
+    pub ip_address: String,
+    pub status: String,
 }

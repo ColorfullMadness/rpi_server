@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::io::{Error, Read};
 use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
-use crate::network_device::{NetworkDevice, Port, Vlan};
+use crate::network_device::{NetworkDevice, Interface, InterfaceDTO, Vlan};
 
 #[derive(Clone,Serialize,Deserialize)]
 pub struct NetworkDevicesHandler {
@@ -69,7 +69,7 @@ impl NetworkDevicesHandler {
 
     pub fn read_interfaces(&mut self) {
         for (_, device) in self.devices.iter_mut() {
-            device.parse_ports().expect("TODO: panic message");
+            device.read_interfaces().expect("TODO: panic message");
         }
     }
 }

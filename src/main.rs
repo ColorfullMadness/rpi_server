@@ -17,7 +17,7 @@ use handlebars::Handlebars;
 use log::info;
 use serde::Serialize;
 use crate::config_handler::ConfigHandler;
-use crate::network_device::{NetworkDevice, Vlan, VlanDTO};
+use crate::network_device::{NetworkDevice, Vlan, VlanDTO, InterfaceDTO, Interface};
 use crate::network_devices_handler::NetworkDevicesHandler;
 
 use derive_more::{Error, Display};
@@ -108,6 +108,46 @@ async fn add_vlan(path: web::Path<u32>, vlan_dto: Json<VlanDTO>, network_devices
             device.add_vlan(vlan_dto.into_inner())
         }
     }
+}
+
+#[post("/device/{device_id}/interface/{interface_id}")]
+async fn conf_interface(path: web::Path<(u32, u32)>, interface_dto: Json<InterfaceDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError> {
+    let (device_id, interface_id) = path.into_inner();
+
+    match network_devices_handler.lock().unwrap().devices.get_mut(&device_id) {
+        None => {
+            Err(
+                ExecutionError{
+                    message: "Couldn't find device.".to_string()
+                }
+            )
+        }
+        Some(device) => {
+            match device.interfaces.get_mut(&interface_id) {
+                None => {
+                    Err(
+                        ExecutionError{
+                            message: "Couldn't find interface.".to_string()
+                        }
+                    )
+                }
+                Some(interface) => {
+                    let statuss = match interface_dto.status {
+                        "up" => {
+                            "no shutdown"
+                        },
+                        "down" => {
+                            "shutdown"
+                        }
+                        _ => {""}
+                    };
+                    device.execute_command(&format!("en \n conf t \n ip route {} {} {} \n {}", interface_dto.ip_address_from, interface_dto.mask_from, interface_dto.ip_address_to, statuss));
+                    Ok(Json(device.read_interfaces()?.clone()))
+                }
+            }
+        }
+    }
+
 }
 
 #[get("/device/{id}/reload_configs")]
