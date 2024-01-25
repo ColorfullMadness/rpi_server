@@ -141,7 +141,7 @@ async fn conf_interface(path: web::Path<(u32, u32)>, interface_dto: Json<Interfa
                         }
                         _ => {""}
                     };
-                    device.execute_command(&format!("en \n conf t \n ip route {} {} {} \n {}", interface_dto.ip_address_from, interface_dto.mask_from, interface_dto.ip_address_to, statuss));
+                    device.execute_command(&format!("en \n conf t \n ip route {} {} {} \n {}", interface_dto.ip_address_from, interface_dto.mask_from, interface_dto.ip_address_to, statuss)).expect("TODO: panic message");
                     Ok(Json(device.read_interfaces()?.clone()))
                 }
             }
