@@ -132,7 +132,7 @@ async fn conf_interface(path: web::Path<(u32, u32)>, interface_dto: Json<Interfa
                     )
                 }
                 Some(interface) => {
-                    let statuss = match interface_dto.status {
+                    let statuss = match interface_dto.status.as_ref() {
                         "up" => {
                             "no shutdown"
                         },

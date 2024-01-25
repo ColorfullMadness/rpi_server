@@ -288,7 +288,7 @@ pub struct InterfaceDTO {
     pub ip_address_from: String,
     pub mask_from: String,
     pub ip_address_to: String,
-    pub status: InterfaceStatus,
+    pub status: String,
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
