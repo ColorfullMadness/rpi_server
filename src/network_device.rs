@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::io::Read;
+use std::thread::panicking;
+use actix_web::web::Json;
 use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
 use substring::Substring;
@@ -13,9 +15,9 @@ pub struct NetworkDevice {
     pub hostname: String,
     pub vlans: HashMap<u32, Vlan>,
     pub interfaces: HashMap<u32, Port>,
-    pub raw_config: String,
+    pub startup_config: String,
+    pub running_config: String,
 }
-//Unikalny
 
 impl Default for NetworkDevice {
     fn default() -> Self {
@@ -26,7 +28,8 @@ impl Default for NetworkDevice {
             hostname: "Router".to_string(),
             vlans: HashMap::new(),
             interfaces: HashMap::new(),
-            raw_config: "".to_string(),
+            startup_config: "".to_string(),
+            running_config: "".to_string(),
         }
     }
 }
@@ -49,10 +52,40 @@ impl NetworkDevice {
         }
     }
 
+    pub fn read_running_config(&mut self) -> Result<String, ExecutionError> {
+        return match self.execute_command("sh running-config") {
+            Err(why) => {
+                Err(ExecutionError {
+                    message: why.to_string()
+                })
+            }
+            Ok(result) => {
+                self.running_config = result.lines().skip(1).collect();
+                Ok("Successfully read running-config".to_string())
+            }
+        }
+    }
+
+    pub fn read_startup_config(&mut self) -> Result<String, ExecutionError> {
+        return match self.execute_command("sh startup-config") {
+            Err(why) => {
+                Err(ExecutionError {
+                    message: why.to_string()
+                })
+            }
+            Ok(result) => {
+                self.startup_config = result.lines().skip(1).collect();
+                Ok("Successfully read startup-config".to_string())
+            }
+        }
+    }
+
     pub fn set_vlans(&mut self, vlans: HashMap<u32, Vlan>) {
         self.vlans = vlans;
     }
 
+    //TODO trzeba będzie dodać en do wszystkich komend, najlepiej w funkcji wykonującej komendy przy przerobieniu jej na
+    // działanie na pojedyńczym połączeniu na urządzenie
     pub fn read_vlans(&mut self) {
         match self.execute_command("sh vlan brief") {
             Ok(response) => {
@@ -77,12 +110,12 @@ impl NetworkDevice {
                                 let status = line.substring(status_index, ports_index-1).trim();
                                 let ports = line.substring(ports_index, line.len()).trim();
 
-                                //TODOlet ports_p: Vec<u32> = parse_interfaces(ports);
+                                let ports_p: Vec<u32> = parse_interfaces(self, ports);
 
                                 let vlan = Vlan {
                                     name: name.to_string(),
                                     status: status.to_string(),
-                                    ports: vec![],
+                                    ports: ports_p,
                                 };
                                 vlans.insert(nr,vlan);
                                 last_vlan = nr;
@@ -91,8 +124,8 @@ impl NetworkDevice {
                                 let mut vlan = vlans.get_mut(&last_vlan).expect("Should be vlan present here.");
                                 let ports = line.substring(ports_index, line.len()).trim();
 
-                                let mut ports_p: Vec<Port> = parse_interfaces(ports);
-                                // vlan.ports.append(&mut ports_p);
+                                let mut ports_p: Vec<u32> = parse_interfaces(self, ports);
+                                vlan.ports.append(&mut ports_p);
                             }
                         }
                     }
@@ -187,7 +220,7 @@ impl NetworkDevice {
                         ports.insert(nr as u32, port);
                     }
                 });
-                self.ports = ports;
+                self.interfaces = ports;
                 Ok(self)
             }
             Err(why) => {
@@ -205,7 +238,7 @@ impl NetworkDevice {
     // }
 }
 
-fn parse_interfaces(ports: &str) -> Vec<Port> {
+fn parse_interfaces(device: &NetworkDevice, ports: &str) -> Vec<u32> {
     if ports.is_empty() {
         return Vec::new();
     }
@@ -213,11 +246,25 @@ fn parse_interfaces(ports: &str) -> Vec<Port> {
     ports.split(",").map(|port|{
         let (kind, port_mod): (&str, &str) = port.trim().split_at(2);
         let (port_mod_p, port_nr): (&str, &str) = port_mod.split_once("/").expect("Mod/Port format not correct.");
-        Port {
-            interface: kind.to_string(),
-            module: port_mod_p.parse().expect(&*("Couldn't parse port module: ".to_owned() + port_mod_p)),
-            number: port_nr.parse().expect("Couldn't parse port nr"),
-        }
+
+        let kind_m = match kind {
+            "Fa" => "FastEthernet",
+            "Ga" => "GigabitEthernet",
+            _ => ""
+        };
+
+        println!("Interfaces: {:?}", device.interfaces);
+
+        device.interfaces.iter()
+            .filter(|(id, int)|{
+                int.interface == kind_m && int.module == port_mod_p.parse::<u32>().unwrap() && int.number == port_nr.parse::<u32>().unwrap()
+            })
+            .map(|(id, int)|{
+                println!("ID: {}", id);
+                id.clone()
+            })
+            .last()
+            .unwrap()
     }).collect()
 }
 
@@ -225,7 +272,7 @@ fn parse_interfaces(ports: &str) -> Vec<Port> {
 pub struct VlanDTO {
     pub number: u32,
     pub name: String,
-    pub interfaces: Vec<Port>
+    pub interfaces: Vec<u32>
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]

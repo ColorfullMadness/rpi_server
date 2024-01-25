@@ -83,7 +83,8 @@ impl Default for ConfigHandler{
             ip_address: "127.0.0.1".to_string(),
             platform: "Windows".to_string(),
             templates_loc: "./templates".to_string(),
-            mac_address: "00:00:00:00:00".to_string()
+            mac_address: "00:00:00:00:00".to_string(),
+            version: "1.0.0".to_string(),
         }
     }
 }

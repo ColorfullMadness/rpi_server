@@ -4,7 +4,7 @@ mod network_devices_handler;
 mod network_device;
 
 use actix_web::http::header::ContentType;
-use std::{env, fs};
+use std::{env, fs, u32};
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 use actix_web::{get, HttpServer, App, web, Responder, post, HttpResponse, ResponseError, put, delete};
@@ -38,7 +38,7 @@ async fn health() -> impl Responder {
     HttpResponse::new(StatusCode::NO_CONTENT)
 }
 
-#[get("/status/config")]
+#[get("/config")]
 async fn system(config: Data<ConfigHandler>) -> impl Responder{
     info!("Fetched config: {}", &config.to_string());
     Ok::<Json<Data<ConfigHandler>>,JsonPayloadError>(Json(config))
@@ -97,7 +97,7 @@ async fn change_device_hostname(path: web::Path<(u32, String)>, network_devices_
 }
 
 #[post("/device/{device_id}/vlan")]
-async fn add_vlan(path: web::Path<u32>, vlan_dto: web::Json<VlanDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
+async fn add_vlan(path: web::Path<u32>, vlan_dto: Json<VlanDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
     let id = path.into_inner();
 
     match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
@@ -106,6 +106,24 @@ async fn add_vlan(path: web::Path<u32>, vlan_dto: web::Json<VlanDTO>, network_de
         }
         Some(device) => {
             device.add_vlan(vlan_dto.into_inner())
+        }
+    }
+}
+
+#[get("/device/{id}/reload_configs")]
+async fn reload_configs(path: web::Path<u32>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError> {
+    let id = path.into_inner();
+
+    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
+        None => {
+            Err(ExecutionError {
+                message: "Couldn't find device.".to_string()
+            })
+        },
+        Some(device) => {
+            device.read_running_config().expect("Couldn't read running config");
+            device.read_startup_config().expect("Couldn't read startup config");
+            Ok(Json(device.clone()))
         }
     }
 }
@@ -123,8 +141,8 @@ async fn main() -> std::io::Result<()>{
     println!("{:?}", env::current_dir());
 
     let mut devices_handler = NetworkDevicesHandler::default();
-    // devices_handler.read_vlans();
     devices_handler.read_interfaces();
+    devices_handler.read_vlans();
     let mut conf = ConfigHandler::init(&Default::default());
     let templates = conf.templates_loc.clone();
     let ip_addr = conf.ip_address.clone();
@@ -146,6 +164,7 @@ async fn main() -> std::io::Result<()>{
             .service(get_network_device)
             .service(change_device_hostname)
             .service(delete_vlan_from_device)
+            .service(reload_configs)
             .default_service(web::route().to(not_found::not_found))
     })
         .bind((ip_addr.to_owned(), 8080))?

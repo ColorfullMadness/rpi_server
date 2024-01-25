@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::{Error, Read};
-use std::num::ParseIntError;
-use log::info;
 use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
-use substring::Substring;
 use crate::network_device::{NetworkDevice, Port, Vlan};
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -40,11 +37,14 @@ impl Default for NetworkDevicesHandler {
                                 let r_s = response.to_string();
                                 let output = r_s.split_once("\n").unwrap();
                                 network_devices.insert(next_id, NetworkDevice {
+                                    serial_number: "".to_string(),
                                     ip_address: "".to_string(),
                                     s_port: p.to_str().unwrap().to_string(),
                                     hostname: output.1.trim().to_string(),
                                     vlans: HashMap::new(),
-                                    ports: HashMap::new()
+                                    interfaces: Default::default(),
+                                    startup_config: "".to_string(),
+                                    running_config: "".to_string(),
                                 });
                             }
                         }
