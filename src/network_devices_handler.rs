@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::{Error, Read};
+use std::thread;
 use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
+use std::thread::sleep;
+use std::time::Duration;
 use crate::network_device::{NetworkDevice, Interface, InterfaceDTO, Vlan};
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -20,7 +23,8 @@ impl Default for NetworkDevicesHandler {
             println!("Port: {:?}", p);
             match SerialPort::open(p.clone(), 9600) {
                 Ok(mut port) => {
-                    match port.write("show version\n".as_ref()) {
+                    sleep(Duration::from_millis(1000));
+                    match port.write("show version".as_ref()) {
                         Ok(res) => {
                             match port.read_to_string(response) {
                                 Ok(_) => {}
@@ -29,7 +33,7 @@ impl Default for NetworkDevicesHandler {
                             println!("{}",response);
                             if response.contains("Cisco") {
                                 response.clear();
-                                port.write("hostname\n".as_ref()).unwrap();
+                                port.write("hostname".as_ref()).unwrap();
                                 match port.read_to_string(response) {
                                     Ok(_) => {}
                                     Err(why) => {}
