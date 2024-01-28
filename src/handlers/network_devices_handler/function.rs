@@ -1,14 +1,9 @@
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::io::{Error, Read};
-use serde::{Deserialize, Serialize};
+use std::io::Read;
 use serial2::SerialPort;
-use crate::network_device::{NetworkDevice, Interface, InterfaceDTO, Vlan};
 
-#[derive(Clone,Serialize,Deserialize)]
-pub struct NetworkDevicesHandler {
-    pub devices: HashMap<u32, NetworkDevice>,
-}
+use super::model::NetworkDevicesHandler;
+use crate::objects::device::model::NetworkDevice;
 
 impl Default for NetworkDevicesHandler {
     fn default() -> Self {

@@ -1,24 +1,12 @@
+use super::model::NetworkDevice;
+use crate::objects::interface::model::*;
+use crate::objects::vlan::model::*;
+
 use std::collections::HashMap;
 use std::io::Read;
-use std::net::IpAddr;
-use std::thread::panicking;
-use actix_web::web::Json;
-use serde::{Deserialize, Serialize};
 use serial2::SerialPort;
 use substring::Substring;
-use crate::ExecutionError;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkDevice {
-    pub serial_number: String, 
-    pub ip_address: String,
-    pub s_port: String,
-    pub hostname: String,
-    pub vlans: HashMap<u32, Vlan>,
-    pub interfaces: HashMap<u32, Interface>,
-    pub startup_config: String,
-    pub running_config: String,
-}
+use crate::errors::execution_error::ExecutionError;
 
 impl Default for NetworkDevice {
     fn default() -> Self {
@@ -143,7 +131,7 @@ impl NetworkDevice {
         return match self.execute_command(&format!("en\n conf t\n no vlan {}", vlan_id)) {
             Err(why) => {
                 Err(ExecutionError {
-                   message: why.to_string()
+                    message: why.to_string()
                 })
             }
             Ok(_) => {
@@ -187,7 +175,7 @@ impl NetworkDevice {
                 let mut protocol_index:usize = 0;
 
                 let mut ports:HashMap<u32, Interface> = HashMap::new();
-                
+
                 response.lines().skip(1).enumerate().for_each(|(nr, line)| {
                     if line.starts_with("Interface") {
                         interface_index = line.find("Interface").unwrap_or(5);
@@ -269,50 +257,4 @@ fn parse_interfaces(device: &NetworkDevice, ports: &str) -> Vec<u32> {
             .last()
             .unwrap()
     }).collect()
-}
-
-#[derive(Debug,Deserialize)]
-pub struct VlanDTO {
-    pub number: u32,
-    pub name: String,
-    pub interfaces: Vec<u32>
-}
-
-#[derive(Debug, Deserialize)]
-pub enum InterfaceStatus {
-    UP,
-    DOWN,
-}
-#[derive(Debug, Deserialize)]
-pub struct InterfaceDTO {
-    pub ip_address_from: String,
-    pub mask_from: String,
-    pub ip_address_to: String,
-    pub status: String,
-}
-
-#[derive(Debug,Clone,Serialize,Deserialize)]
-pub struct Vlan {
-    pub(crate) name: String,
-    pub(crate) status: String, //TODO change this to enum with possible status values
-    pub(crate) ports: Vec<u32> //TODO najpierw trzeba zaczytać interfejsy i potem można przypisać ich idki do vlanów
-}
-
-impl Default for Vlan {
-    fn default() -> Self {
-        Vlan {
-            name: "Vlan1".to_string(),
-            status: "Suspended".to_string(),
-            ports: Vec::new()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Interface {
-    pub int_type: String,
-    pub module: u32,
-    pub number: u32,
-    pub ip_address: String,
-    pub status: String,
 }

@@ -1,20 +1,9 @@
 use std::fmt::{Display, Formatter, write};
-use serde::{Deserialize, Serialize};
-use sysinfo::{System, SystemExt, NetworkExt, NetworksExt, Networks};
-use log::{info, warn};
-use uuid;
-use std::io::Write;
+use log::info;
+use sysinfo::{NetworkExt, NetworksExt, System, SystemExt};
 use uuid::Uuid;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ConfigHandler {
-    pub uuid: String,
-    pub ip_address: String,
-    pub platform: String,
-    pub templates_loc: String,
-    pub mac_address: String,
-    pub version: String,
-}
+use super::model::ConfigHandler;
 
 impl ConfigHandler {
     pub fn init(&self) -> Self {
@@ -92,8 +81,9 @@ impl Default for ConfigHandler{
 impl Display for ConfigHandler{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write(f, format_args!("Config: ip_address: {}, mac_address: {}, uuid: {}",
-            self.ip_address,
-            self.mac_address,
-            self.uuid))
+                              self.ip_address,
+                              self.mac_address,
+                              self.uuid))
     }
 }
+
