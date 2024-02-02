@@ -29,7 +29,7 @@ impl NetworkDevice {
         match SerialPort::open(self.s_port.clone(), 9600) {
             Ok(mut port) => {
                 match port.write(command.as_ref()) {
-                    Ok(res) => {
+                    Ok(_res) => {
                         port.read_to_string(response);
                         println!("{}",response);
                         return Ok(response.clone());
@@ -109,7 +109,7 @@ impl NetworkDevice {
                                 vlans.insert(nr,vlan);
                                 last_vlan = nr;
                             }
-                            Err(why) => {
+                            Err(_why) => {
                                 let mut vlan = vlans.get_mut(&last_vlan).expect("Should be vlan present here.");
                                 let ports = line.substring(ports_index, line.len()).trim();
 
@@ -187,10 +187,10 @@ impl NetworkDevice {
                     } else {
                         let port = line.substring(interface_index, ip_address_index - 1).trim();
                         let ip_address = line.substring(ip_address_index, ok_index - 1).trim();
-                        let ok = line.substring(ok_index, method_index - 1).trim();
-                        let method = line.substring(method_index, status_index - 1).trim();
+                        let _ok = line.substring(ok_index, method_index - 1).trim();
+                        let _method = line.substring(method_index, status_index - 1).trim();
                         let status = line.substring(status_index, protocol_index - 1).trim();
-                        let protocol = line.substring(protocol_index, line.len()).trim();
+                        let _protocol = line.substring(protocol_index, line.len()).trim();
 
                         let pat = &['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
                         let first_digit = port.find(pat).unwrap();
@@ -223,6 +223,44 @@ impl NetworkDevice {
         }
     }
 
+    fn get_interface(&mut self, interface_id: u32) -> Result<&Interface, ExecutionError> {
+        match self.interfaces.get(&interface_id) {
+            Some(interface) => {
+                Ok(interface)
+            },
+            None => {
+                Err(ExecutionError{message: "Couldn't find interface.".to_string()})
+            }
+        }
+    }
+
+    pub fn configure_interface(&mut self, interface_id: u32, interface_dto: InterfaceDTO) -> Result<&mut NetworkDevice, ExecutionError> {
+        let interface = self.get_interface(interface_id)?;
+        let status = match interface_dto.status.as_ref() {
+            "up" => {
+                "no shutdown"
+            },
+            "down" => {
+                "shutdown"
+            }
+            _ => {""}
+        };
+        match self.execute_command(&format!("en \n conf t \n interface {} {}/{}\n ip address {} {} \n {}",
+                                      interface.int_type,
+                                      interface.module,
+                                      interface.number,
+                                      interface_dto.ip_address,
+                                      interface_dto.mask,
+                                      status)) {
+            Ok(_response) => {
+                Ok(self.read_interfaces()?)
+            },
+            Err(why) => {
+                Err(ExecutionError{message: format!("{}{}","Couldn't configure interface because: ", why.to_string() )})
+            }
+
+        }
+    }
     //TODO
     // fn add_int_to_vlan(&mut self, vlan: VlanDTO) -> Result<String, MyError> {
     //     return match

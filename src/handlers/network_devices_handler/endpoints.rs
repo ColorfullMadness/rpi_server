@@ -11,127 +11,56 @@ use crate::objects::interface::model::InterfaceDTO;
 use crate::objects::vlan::model::VlanDTO;
 
 #[get("/devices")]
-async fn get_network_devices(devices: Data<Mutex<NetworkDevicesHandler>>) -> impl Responder {
-    let devices_data = &devices.lock().unwrap().devices;
+async fn get_network_devices(devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> impl Responder {
+    let devices_data = &devices_handler.lock().unwrap().devices;
     Ok::<Json<HashMap<u32,NetworkDevice>>,JsonPayloadError>(Json(devices_data.clone()))
 }
 
 #[get("/device/{id}")]
 async fn get_network_device(path: web::Path<u32>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
     let id = path.into_inner();
-    let devices = &network_devices_handler.lock().unwrap().devices;
-    let device_u =devices.get_key_value(&id);
-    match device_u {
-        None => Err(ExecutionError { message:"Couldn't find device".to_string() }),
-        Some((_, device)) => Ok(Json(device.clone()))
-    }
-}
-
-#[delete("/device/{id}/vlan/{vlan_id}")]
-async fn delete_vlan(path: web::Path<(u32, u32)> ,devices: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
-    let (device_id, vlan_id) = path.into_inner();
-    let devices = &mut devices.lock().unwrap().devices;
-    let device = devices.get_mut(&device_id);
-    match device {
-        None => Err(ExecutionError { message:"Couldn't find device".to_string() }),
-        Some((device)) => {
-            device.remove_vlan(vlan_id)
-        }
-    }
-}
-
-#[post("/device/{id}/hostname/{hostname}")]
-async fn change_hostname(path: web::Path<(u32, String)>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
-    let (id, hostname) = path.into_inner();
-
-    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
-        None => {
-            Err(ExecutionError { message:"Couldn't find device.".to_string()})
-        }
-        Some(device) => {
-            match device.execute_command(("en \nconf t \nhostname".to_owned() + &*hostname + "\n").as_str()) {
-                Ok(response) => {
-                    device.hostname = hostname.to_string();
-                    Ok(Json(device.clone()))
-                }
-                Err(why) => {
-                    Err(ExecutionError { message: "Couldn't change hostname".to_string()})
-                }
-            }
-        }
-    }
+    let mut devices_handler = &network_devices_handler.lock().unwrap();
+    let device = devices_handler.get_device(id)?;
+    Ok(Json(device.clone()))
 }
 
 #[post("/device/{device_id}/vlan")]
 async fn add_vlan(path: web::Path<u32>, vlan_dto: Json<VlanDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
     let id = path.into_inner();
+    let mut devices_handler = network_devices_handler.lock().unwrap();
+    devices_handler.add_vlan(id, vlan_dto.into_inner())
+}
 
-    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
-        None => {
-            Err(ExecutionError { message:"Couldn't find device.".to_string()})
-        }
-        Some(device) => {
-            device.add_vlan(vlan_dto.into_inner())
-        }
-    }
+#[delete("/device/{device_id}/vlan/{vlan_id}")]
+async fn delete_vlan(path: web::Path<(u32, u32)> ,network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
+    let (device_id, vlan_id) = path.into_inner();
+    let mut devices_handler = &network_devices_handler.lock().unwrap();
+    devices_handler.remove_vlan(device_id, vlan_id)
+}
+
+#[post("/device/{id}/hostname/{hostname}")]
+async fn change_hostname(path: web::Path<(u32, &str)>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
+    let (id, hostname) = path.into_inner();
+    let mut devices_handler = network_devices_handler.lock().unwrap();
+    let device_conf = devices_handler.change_hostname(id, hostname)?;
+    Ok(Json(device_conf.clone()))
 }
 
 #[post("/device/{device_id}/interface/{interface_id}")]
 async fn conf_interface(path: web::Path<(u32, u32)>, interface_dto: Json<InterfaceDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError> {
     let (device_id, interface_id) = path.into_inner();
+    let device = network_devices_handler.lock().unwrap().configure_interface(device_id, interface_id, interface_dto.into_inner())?;
 
-    match network_devices_handler.lock().unwrap().devices.get_mut(&device_id) {
-        None => {
-            Err(
-                ExecutionError{
-                    message: "Couldn't find device.".to_string()
-                }
-            )
-        }
-        Some(device) => {
-            match device.interfaces.get_mut(&interface_id) {
-                None => {
-                    Err(
-                        ExecutionError{
-                            message: "Couldn't find interface.".to_string()
-                        }
-                    )
-                }
-                Some(interface) => {
-                    let statuss = match interface_dto.status.as_ref() {
-                        "up" => {
-                            "no shutdown"
-                        },
-                        "down" => {
-                            "shutdown"
-                        }
-                        _ => {""}
-                    };
-                    device.execute_command(&format!("en \n conf t \n ip route {} {} {} \n {}", interface_dto.ip_address_from, interface_dto.mask_from, interface_dto.ip_address_to, statuss)).expect("TODO: panic message");
-                    Ok(Json(device.read_interfaces()?.clone()))
-                }
-            }
-        }
-    }
-
+    Ok(Json(device.clone()))
 }
 
 #[get("/device/{id}/reload_configs")]
 async fn reload_configs(path: web::Path<u32>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError> {
     let id = path.into_inner();
+    let mut devices_manager = network_devices_handler.lock().unwrap();
+    let device = devices_manager.reload_configs(id)?;
 
-    match network_devices_handler.lock().unwrap().devices.get_mut(&id) {
-        None => {
-            Err(ExecutionError {
-                message: "Couldn't find device.".to_string()
-            })
-        },
-        Some(device) => {
-            device.read_running_config().expect("Couldn't read running config");
-            device.read_startup_config().expect("Couldn't read startup config");
-            Ok(Json(device.clone()))
-        }
-    }
+    Ok(Json(device.clone()))
 }
 
 pub fn init_nd_endpoints(cfg: &mut web::ServiceConfig) {

@@ -11,9 +11,8 @@ pub struct Interface {
 
 #[derive(Debug, Deserialize)]
 pub struct InterfaceDTO {
-    pub ip_address_from: String,
-    pub mask_from: String,
-    pub ip_address_to: String,
+    pub ip_address: String,
+    pub mask: String,
     pub status: String,
 }
 
