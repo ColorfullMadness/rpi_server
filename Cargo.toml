@@ -3,6 +3,12 @@ name = "rpi_client"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "rpi_client"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -17,6 +23,8 @@ dotenv = "0.15.0"
 serial2 = "0.2.8"
 substring = "1.4.5"
 derive_more = "0.99.17"
+tokio = { version = "1.35.1", features = ["full"] }
+reqwest = "0.11.26"
 [dependencies.uuid]
 version = "1.5.0"
 features = [

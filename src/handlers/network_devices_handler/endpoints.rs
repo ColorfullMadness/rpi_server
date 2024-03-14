@@ -19,7 +19,7 @@ async fn get_network_devices(devices_handler: Data<Mutex<NetworkDevicesHandler>>
 #[get("/device/{id}")]
 async fn get_network_device(path: web::Path<u32>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
     let id = path.into_inner();
-    let mut devices_handler = &network_devices_handler.lock().unwrap();
+    let mut devices_handler = &mut network_devices_handler.lock().unwrap();
     let device = devices_handler.get_device(id)?;
     Ok(Json(device.clone()))
 }
@@ -34,22 +34,23 @@ async fn add_vlan(path: web::Path<u32>, vlan_dto: Json<VlanDTO>, network_devices
 #[delete("/device/{device_id}/vlan/{vlan_id}")]
 async fn delete_vlan(path: web::Path<(u32, u32)> ,network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<String, ExecutionError> {
     let (device_id, vlan_id) = path.into_inner();
-    let mut devices_handler = &network_devices_handler.lock().unwrap();
+    let mut devices_handler = &mut network_devices_handler.lock().unwrap();
     devices_handler.remove_vlan(device_id, vlan_id)
 }
 
 #[post("/device/{id}/hostname/{hostname}")]
-async fn change_hostname(path: web::Path<(u32, &str)>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
+async fn change_hostname(path: web::Path<(u32, String)>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError>{
     let (id, hostname) = path.into_inner();
     let mut devices_handler = network_devices_handler.lock().unwrap();
-    let device_conf = devices_handler.change_hostname(id, hostname)?;
+    let device_conf = devices_handler.change_hostname(id, hostname.as_str())?;
     Ok(Json(device_conf.clone()))
 }
 
 #[post("/device/{device_id}/interface/{interface_id}")]
 async fn conf_interface(path: web::Path<(u32, u32)>, interface_dto: Json<InterfaceDTO>, network_devices_handler: Data<Mutex<NetworkDevicesHandler>>) -> Result<Json<NetworkDevice>, ExecutionError> {
     let (device_id, interface_id) = path.into_inner();
-    let device = network_devices_handler.lock().unwrap().configure_interface(device_id, interface_id, interface_dto.into_inner())?;
+    let mut devices_handler = network_devices_handler.lock().unwrap();
+    let device = devices_handler.configure_interface(device_id, interface_id, interface_dto.into_inner())?;
 
     Ok(Json(device.clone()))
 }

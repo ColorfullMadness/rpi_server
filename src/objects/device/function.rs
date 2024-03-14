@@ -24,7 +24,7 @@ impl Default for NetworkDevice {
 }
 
 impl NetworkDevice {
-    pub fn execute_command(&self, command:&str) -> Result<String, std::io::Error> {
+    pub fn execute_command(&mut self, command:&str) -> Result<String, std::io::Error> {
         let mut response = &mut "".to_string();
         match SerialPort::open(self.s_port.clone(), 9600) {
             Ok(mut port) => {
@@ -223,7 +223,7 @@ impl NetworkDevice {
         }
     }
 
-    fn get_interface(&mut self, interface_id: u32) -> Result<&Interface, ExecutionError> {
+    fn get_interface(&self, interface_id: u32) -> Result<&Interface, ExecutionError> {
         match self.interfaces.get(&interface_id) {
             Some(interface) => {
                 Ok(interface)
@@ -245,13 +245,15 @@ impl NetworkDevice {
             }
             _ => {""}
         };
-        match self.execute_command(&format!("en \n conf t \n interface {} {}/{}\n ip address {} {} \n {}",
-                                      interface.int_type,
-                                      interface.module,
-                                      interface.number,
-                                      interface_dto.ip_address,
-                                      interface_dto.mask,
-                                      status)) {
+
+        let output = self.execute_command(&format!("en \n conf t \n interface {} {}/{}\n ip address {} {} \n {}",
+                                                   interface.int_type,
+                                                   interface.module,
+                                                   interface.number,
+                                                   interface_dto.ip_address,
+                                                   interface_dto.mask,
+                                                   status));
+        match output{
             Ok(_response) => {
                 Ok(self.read_interfaces()?)
             },

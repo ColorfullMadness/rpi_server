@@ -94,7 +94,7 @@ impl NetworkDevicesHandler {
         match device.execute_command(("en \nconf t \nhostname".to_owned() + &*hostname + "\n").as_str()) {
             Ok(_response) => {
                 device.hostname = hostname.to_string();
-                Ok(&device)
+                Ok(device)
             }
             Err(_why) => { //This error should probably be piped to some kind of per device error handling for case when it stops working mid session
                 Err(ExecutionError { message: "Couldn't change hostname".to_string()})
